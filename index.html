@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D 비행 시뮬레이터</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            touch-action: none;
+        }
+        canvas {
+            display: block;
+            touch-action: none;
+        }
+        #ui {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            color: white;
+            font-size: 16px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+            z-index: 10;
+            background: rgba(0,0,0,0.5);
+            padding: 15px;
+            border-radius: 10px;
+        }
+        #ui div {
+            margin: 5px 0;
+        }
+        #controls {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            color: white;
+            background: rgba(0,0,0,0.6);
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+            font-size: 13px;
+        }
+        #gameOver {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.95);
+            color: white;
+            padding: 40px;
+            border-radius: 15px;
+            text-align: center;
+            display: none;
+            z-index: 100;
+            min-width: 300px;
+        }
+        #gameOver h1 {
+            margin-bottom: 20px;
+            color: #ff4444;
+        }
+        button {
+            margin-top: 20px;
+            padding: 12px 35px;
+            font-size: 18px;
+            cursor: pointer;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            transition: all 0.3s;
+        }
+        button:hover {
+            background: #45a049;
+            transform: scale(1.05);
+        }
+        
+        /* 조이스틱 스타일 */
+        .joystick-container {
+            position: absolute;
+            bottom: 30px;
+            width: 150px;
+            height: 150px;
+            z-index: 50;
+        }
+        #leftJoystick {
+            left: 30px;
+        }
+        #rightJoystick {
+            right: 30px;
+        }
+        .joystick-base {
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle, rgba(255,255,255,0.3), rgba(255,255,255,0.1));
+            border: 3px solid rgba(255,255,255,0.5);
+            border-radius: 50%;
+            position: relative;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+        .joystick-stick {
+            width: 60px;
+            height: 60px;
+            background: radial-gradient(circle, rgba(255,255,255,0.9), rgba(255,255,255,0.6));
+            border: 3px solid rgba(255,255,255,0.8);
+            border-radius: 50%;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.4);
+            transition: all 0.1s;
+        }
+        .joystick-label {
+            position: absolute;
+            top: -30px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: white;
+            font-size: 14px;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+            white-space: nowrap;
+        }
+        
+        /* 속도 버튼 */
+        #speedControls {
+            position: absolute;
+            right: 30px;
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            z-index: 50;
+        }
+        .speed-btn {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.3);
+            border: 3px solid rgba(255,255,255,0.6);
+            color: white;
+            font-size: 24px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            user-select: none;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.4);
+            transition: all 0.1s;
+        }
+        .speed-btn:active {
+            transform: scale(0.95);
+            background: rgba(255,255,255,0.5);
+        }
+        
+        @media (max-width: 768px) {
+            #controls {
+                display: none;
+            }
+            #ui {
+                font-size: 14px;
+                padding: 10px;
+            }
+        }
+        
+        @media (min-width: 769px) {
+            .joystick-container, #speedControls {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="ui">
+        <div>🚀 속도: <span id="speed">0</span> km/h</div>
+        <div>📏 고도: <span id="altitude">0</span> m</div>
+        <div>⭐ 점수: <span id="score">0</span></div>
+        <div>🏆 최고기록: <span id="highScore">0</span></div>
+    </div>
+    
+    <div id="controls">
+        <div><strong>⌨️ 키보드 조작</strong></div>
+        <div>W/S: 상승/하강</div>
+        <div>A/D: 좌/우 회전</div>
+        <div>↑/↓: 속도 증가/감소</div>
+    </div>
+    
+    <!-- 왼쪽 조이스틱 (상승/하강, 좌우) -->
+    <div class="joystick-container" id="leftJoystick">
+        <div class="joystick-label">방향 조종</div>
+        <div class="joystick-base">
+            <div class="joystick-stick" id="leftStick"></div>
+        </div>
+    </div>
+    
+    <!-- 오른쪽 조이스틱 (카메라/시점) -->
+    <div class="joystick-container" id="rightJoystick">
+        <div class="joystick-label">시점 조정</div>
+        <div class="joystick-base">
+            <div class="joystick-stick" id="rightStick"></div>
+        </div>
+    </div>
+    
+    <!-- 속도 조절 버튼 -->
+    <div id="speedControls">
+        <div class="speed-btn" id="speedUp">+</div>
+        <div class="speed-btn" id="speedDown">−</div>
+    </div>
+    
+    <div id="gameOver">
+        <h1>🛩️ 게임 오버!</h1>
+        <p style="font-size: 20px; margin: 10px 0;">최종 점수: <span id="finalScore">0</span></p>
+        <p style="font-size: 16px; color: #ffaa00;">최고 기록: <span id="finalHighScore">0</span></p>
+        <button onclick="restartGame()">다시 시작</button>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        let scene, camera, renderer, plane;
+        let trees = [];
+        let mountains = [];
+        let clouds = [];
+        let rocks = [];
+        let birds = [];
+        let speed = 60;
+        let altitude = 100;
+        let score = 0;
+        let highScore = 0;
+        let gameRunning = true;
+        let planeRotation = { x: 0, y: 0, z: 0 };
+        let cameraOffset = { x: 0, y: 0 };
+        
+        const keys = {};
+        
+        // 조이스틱 변수
+        let leftJoystickActive = false;
+        let leftJoystickData = { x: 0, y: 0 };
+        let rightJoystickActive = false;
+        let rightJoystickData = { x: 0, y: 0 };
+        
+        function init() {
+            // 씬 설정
+            scene = new THREE.Scene();
+            scene.fog = new THREE.Fog(0x87CEEB, 200, 1500);
+            scene.background = new THREE.Color(0x87CEEB);
+            
+            // 카메라 설정
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
+            camera.position.set(0, 5, 15);
+            
+            // 렌더러 설정
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            document.body.appendChild(renderer.domElement);
+            
+            // 조명
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+            scene.add(ambientLight);
+            
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(100, 200, 100);
+            directionalLight.castShadow = true;
+            directionalLight.shadow.camera.left = -500;
+            directionalLight.shadow.camera.right = 500;
+            directionalLight.shadow.camera.top = 500;
+            directionalLight.shadow.camera.bottom = -500;
+            directionalLight.shadow.mapSize.width = 2048;
+            directionalLight.shadow.mapSize.height = 2048;
+            scene.add(directionalLight);
+            
+            // 비행기 생성
+            createPlane();
+            
+            // 지형 생성
+            createGround();
+            
+            // 나무들 생성
+            for (let i = 0; i < 150; i++) {
+                createTree();
+            }
+            
+            // 산 생성
+            for (let i = 0; i < 30; i++) {
+                createMountain();
+            }
+            
+            // 바위 생성
+            for (let i = 0; i < 50; i++) {
+                createRock();
+            }
+            
+            // 구름 생성
+            for (let i = 0; i < 40; i++) {
+                createCloud();
+            }
+            
+            // 새 생성
+            for (let i = 0; i < 20; i++) {
+                createBird();
+            }
+            
+            // 이벤트 리스너
+            document.addEventListener('keydown', (e) => keys[e.key] = true);
+            document.addEventListener('keyup', (e) => keys[e.key] = false);
+            window.addEventListener('resize', onWindowResize);
+            
+            // 조이스틱 이벤트
+            setupJoystick('leftJoystick', 'leftStick', (data) => {
+                leftJoystickData = data;
+            });
+            
+            setupJoystick('rightJoystick', 'rightStick', (data) => {
+                rightJoystickData = data;
+            });
+            
+            // 속도 버튼 이벤트
+            document.getElementById('speedUp').addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                keys['ArrowUp'] = true;
+            });
+            document.getElementById('speedUp').addEventListener('touchend', (e) => {
+                e.preventDefault();
+                keys['ArrowUp'] = false;
+            });
+            document.getElementById('speedDown').addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                keys['ArrowDown'] = true;
+            });
+            document.getElementById('speedDown').addEventListener('touchend', (e) => {
+                e.preventDefault();
+                keys['ArrowDown'] = false;
+            });
+            
+            animate();
+        }
+        
+        function setupJoystick(containerId, stickId, callback) {
+            const container = document.getElementById(containerId);
+            const stick = document.getElementById(stickId);
+            const maxDistance = 45;
+            
+            let active = false;
+            let startX = 0, startY = 0;
+            
+            function handleStart(e) {
+                e.preventDefault();
+                active = true;
+                const touch = e.touches ? e.touches[0] : e;
+                const rect = container.getBoundingClientRect();
+                startX = rect.left + rect.width / 2;
+                startY = rect.top + rect.height / 2;
+            }
+            
+            function handleMove(e) {
+                if (!active) return;
+                e.preventDefault();
+                
+                const touch = e.touches ? e.touches[0] : e;
+                let deltaX = touch.clientX - startX;
+                let deltaY = touch.clientY - startY;
+                
+                const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+                if (distance > maxDistance) {
+                    deltaX = (deltaX / distance) * maxDistance;
+                    deltaY = (deltaY / distance) * maxDistance;
+                }
+                
+                stick.style.transform = `translate(calc(-50% + ${deltaX}px), calc(-50% + ${deltaY}px))`;
+                
+                callback({
+                    x: deltaX / maxDistance,
+                    y: -deltaY / maxDistance
+                });
+            }
+            
+            function handleEnd(e) {
+                if (!active) return;
+                e.preventDefault();
+                active = false;
+                stick.style.transform = 'translate(-50%, -50%)';
+                callback({ x: 0, y: 0 });
+            }
+            
+            container.addEventListener('touchstart', handleStart);
+            container.addEventListener('mousedown', handleStart);
+            document.addEventListener('touchmove', handleMove);
+            document.addEventListener('mousemove', handleMove);
+            document.addEventListener('touchend', handleEnd);
+            document.addEventListener('mouseup', handleEnd);
+        }
+        
+        function createPlane() {
+            const planeGroup = new THREE.Group();
+            
+            // 비행기 동체
+            const bodyGeometry = new THREE.BoxGeometry(2.5, 1.2, 5);
+            const bodyMaterial = new THREE.MeshPhongMaterial({ 
+                color: 0xff3333,
+                shininess: 100
+            });
+            const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+            body.castShadow = true;
+            planeGroup.add(body);
+            
+            // 조종석
+            const cockpitGeometry = new THREE.SphereGeometry(0.8, 16, 16);
+            const cockpitMaterial = new THREE.MeshPhongMaterial({ 
+                color: 0x333333,
+                transparent: true,
+                opacity: 0.7,
+                shininess: 200
+            });
+            const cockpit = new THREE.Mesh(cockpitGeometry, cockpitMaterial);
+            cockpit.position.set(0, 0.8, -1);
+            cockpit.scale.set(1, 0.8, 1);
+            planeGroup.add(cockpit);
+            
+            // 날개
+            const wingGeometry = new THREE.BoxGeometry(14, 0.4, 2.5);
+            const wingMaterial = new THREE.MeshPhongMaterial({ color: 0xff3333 });
+            const wing = new THREE.Mesh(wingGeometry, wingMaterial);
+            wing.castShadow = true;
+            planeGroup.add(wing);
+            
+            // 꼬리 날개
+            const tailGeometry = new THREE.BoxGeometry(5, 0.3, 1.5);
+            const tail = new THREE.Mesh(tailGeometry, wingMaterial);
+            tail.position.set(0, 0.5, 2.5);
+            tail.castShadow = true;
+            planeGroup.add(tail);
+            
+            // 수직 꼬리
+            const vTailGeometry = new THREE.BoxGeometry(0.3, 2.5, 1.5);
+            const vTail = new THREE.Mesh(vTailGeometry, wingMaterial);
+            vTail.position.set(0, 1.7, 2.5);
+            vTail.castShadow = true;
+            planeGroup.add(vTail);
+            
+            // 프로펠러
+            const propGeometry = new THREE.BoxGeometry(0.3, 4, 0.3);
+            const propMaterial = new THREE.MeshPhongMaterial({ color: 0x222222 });
+            const propeller = new THREE.Mesh(propGeometry, propMaterial);
+            propeller.position.set(0, 0, -3);
+            planeGroup.add(propeller);
+            planeGroup.userData.propeller = propeller;
+            
+            plane = planeGroup;
+            plane.position.set(0, altitude, 0);
+            scene.add(plane);
+        }
+        
+        function createGround() {
+            const groundGeometry = new THREE.PlaneGeometry(3000, 3000, 80, 80);
+            const groundMaterial = new THREE.MeshPhongMaterial({ 
+                color: 0x2d5016,
+                flatShading: true
+            });
+            
+            const vertices = groundGeometry.attributes.position.array;
+            for (let i = 0; i < vertices.length; i += 3) {
+                vertices[i + 2] = Math.random() * 20 - 5;
+            }
+            groundGeometry.attributes.position.needsUpdate = true;
+            groundGeometry.computeVertexNormals();
+            
+            const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+            ground.rotation.x = -Math.PI / 2;
+            ground.position.y = -10;
+            ground.receiveShadow = true;
+            scene.add(ground);
+        }
+        
+        function createTree() {
+            const treeGroup = new THREE.Group();
+            const height = 8 + Math.random() * 6;
+            
+            const trunkGeometry = new THREE.CylinderGeometry(0.8, 1.2, height, 8);
+            const trunkMaterial = new THREE.MeshPhongMaterial({ color: 0x4a2511 });
+            const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+            trunk.castShadow = true;
+            trunk.position.y = height / 2;
+            treeGroup.add(trunk);
+            
+            const leavesGeometry = new THREE.SphereGeometry(4 + Math.random() * 2, 8, 8);
+            const leavesMaterial = new THREE.MeshPhongMaterial({ color: 0x1a5c1a });
+            const leaves = new THREE.Mesh(leavesGeometry, leavesMaterial);
+            leaves.position.y = height + 3;
+            leaves.castShadow = true;
+            treeGroup.add(leaves);
+            
+            treeGroup.position.set(
+                Math.random() * 1500 - 750,
+                0,
+                Math.random() * 1500 - 750
+            );
+            
+            trees.push(treeGroup);
+            scene.add(treeGroup);
+        }
+        
+        function createMountain() {
+            const height = 50 + Math.random() * 60;
+            const geometry = new THREE.ConeGeometry(25 + Math.random() * 20, height, 8);
+            const material = new THREE.MeshPhongMaterial({ 
+                color: 0x6b6b6b,
+                flatShading: true
+            });
+            const mountain = new THREE.Mesh(geometry, material);
+            mountain.castShadow = true;
+            
+            mountain.position.set(
+                Math.random() * 2000 - 1000,
+                height / 2 - 10,
+                Math.random() * 2000 - 1000
+            );
+            
+            mountains.push(mountain);
+            scene.add(mountain);
+        }
+        
+        function createRock() {
+            const size = 2 + Math.random() * 4;
+            const geometry = new THREE.DodecahedronGeometry(size, 0);
+            const material = new THREE.MeshPhongMaterial({ 
+                color: 0x555555,
+                flatShading: true
+            });
+            const rock = new THREE.Mesh(geometry, material);
+            rock.castShadow = true;
+            
+            rock.position.set(
+                Math.random() * 1500 - 750,
+                -8,
+                Math.random() * 1500 - 750
+            );
+            rock.rotation.set(
+                Math.random() * Math.PI,
+                Math.random() * Math.PI,
+                Math.random() * Math.PI
+            );
+            
+            rocks.push(rock);
+            scene.add(rock);
+        }
+        
+        function createCloud() {
+            const cloudGroup = new THREE.Group();
+            
+            for (let i = 0; i < 4; i++) {
+                const geometry = new THREE.SphereGeometry(6 + Math.random() * 4, 8, 8);
+                const material = new THREE.MeshPhongMaterial({ 
+                    color: 0xffffff,
+                    transparent: true,
+                    opacity: 0.7
+                });
+                const sphere = new THREE.Mesh(geometry, material);
+                sphere.position.set(
+                    Math.random() * 20 - 10,
+                    Math.random() * 5,
+                    Math.random() * 20 - 10
+                );
+                cloudGroup.add(sphere);
+            }
+            
+            cloudGroup.position.set(
+                Math.random() * 1500 - 750,
+                80 + Math.random() * 80,
+                Math.random() * 1500 - 750
+            );
+            
+            clouds.push(cloudGroup);
+            scene.add(cloudGroup);
+        }
+        
+        function createBird() {
+            const birdGroup = new THREE.Group();
+            
+            const bodyGeometry = new THREE.SphereGeometry(0.3, 8, 8);
+            const bodyMaterial = new THREE.MeshPhongMaterial({ color: 0x333333 });
+            const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+            birdGroup.add(body);
+            
+            const wingGeometry = new THREE.BoxGeometry(1.5, 0.1, 0.4);
+            const wingMaterial = new THREE.MeshPhongMaterial({ color: 0x222222 });
+            const wings = new THREE.Mesh(wingGeometry, wingMaterial);
+            birdGroup.add(wings);
+            birdGroup.userData.wings = wings;
+            
+            birdGroup.position.set(
+                Math.random() * 1000 - 500,
+                40 + Math.random() * 60,
+                Math.random() * 1000 - 500
+            );
+            
+            birdGroup.userData.speed = 0.5 + Math.random() * 0.5;
+            birdGroup.userData.angle = Math.random() * Math.PI * 2;
+            birdGroup.userData.wingPhase = Math.random() * Math.PI * 2;
+            
+            birds.push(birdGroup);
+            scene.add(birdGroup);
+        }
+        
+        function updatePlane() {
+            if (!gameRunning) return;
+            
+            // 키보드 + 조이스틱 입력
+            const upInput = (keys['w'] || keys['W'] ? 1 : 0) + leftJoystickData.y;
+            const downInput = (keys['s'] || keys['S'] ? 1 : 0) - leftJoystickData.y;
+            const leftInput = (keys['a'] || keys['A'] ? 1 : 0) - leftJoystickData.x;
+            const rightInput = (keys['d'] || keys['D'] ? 1 : 0) + leftJoystickData.x;
+            
+            // 속도 조절
+            if (keys['ArrowUp']) speed = Math.min(180, speed + 0.5);
+            if (keys['ArrowDown']) speed = Math.max(30, speed - 0.5);
+            
+            // 상승/하강
+            if (upInput > 0) {
+                planeRotation.x = Math.max(-0.4, planeRotation.x - 0.015);
+                altitude += 1.2;
+            } else if (downInput > 0) {
+                planeRotation.x = Math.min(0.4, planeRotation.x + 0.015);
+                altitude -= 1.2;
+            } else {
+                planeRotation.x *= 0.95;
+            }
+            
+            // 좌우 회전
+            if (leftInput > 0) {
+                planeRotation.y += 0.025;
+                planeRotation.z = Math.min(0.6, planeRotation.z + 0.03);
+            } else if (rightInput > 0) {
+                planeRotation.y -= 0.025;
+                planeRotation.z = Math.max(-0.6, planeRotation.z - 0.03);
+            } else {
+                planeRotation.z *= 0.95;
+            }
+            
+            // 카메라 오프셋 (오른쪽 조이스틱)
+            cameraOffset.x += rightJoystickData.x * 0.2;
+            cameraOffset.y += rightJoystickData.y * 0.2;
+            cameraOffset.x = Math.max(-10, Math.min(10, cameraOffset.x));
+            cameraOffset.y = Math.max(-5, Math.min(5, cameraOffset.y));
+            
+            if (rightJoystickData.x === 0 && rightJoystickData.y === 0) {
+                cameraOffset.x *= 0.9;
+                cameraOffset.y *= 0.9;
+            }
+            
+            altitude = Math.max(15, Math.min(400, altitude));
+            
+            plane.rotation.x = planeRotation.x;
+            plane.rotation.y = planeRotation.y;
+            plane.rotation.z = planeRotation.z;
+            plane.position.y = altitude;
+            
+            if (plane.userData.propeller) {
+                plane.userData.propeller.rotation.z += speed * 0.015;
+            }
+            
+            const cameraOffsetVec = new THREE.Vector3(cameraOffset.x, 5 + cameraOffset.y, 15);
+            cameraOffsetVec.applyQuaternion(plane.quaternion);
+            camera.position.copy(plane.position).add(cameraOffsetVec);
+            camera.lookAt(plane.position);
+            
+            score += speed * 0.015;
+            
+            updateUI();
+        }
+        
+        function updateEnvironment() {
+            const moveSpeed = speed * 0.12;
+            
+            trees.forEach(tree => {
+                tree.position.z += moveSpeed;
+                if (tree.position.z > plane.position.z + 300) {
+                    tree.position.z = plane.position.z - 1200;
+                    tree.position.x = Math.random() * 1500 - 750;
+                }
+                
+                const distance = plane.position.distanceTo(tree.position);
+                if (distance < 10 && Math.abs(plane.position.y - tree.position.y) < 12) {
+                    gameOver();
+                }
+            });
+            
+            mountains.forEach(mountain => {
+                mountain.position.z += moveSpeed;
+                if (mountain.position.z > plane.position.z + 400) {
+                    mountain.position.z = plane.position.z - 1600;
+                    mountain.position.x = Math.random() * 2000 - 1000;
+                }
+                
+                const distance = plane.position.distanceTo(mountain.position);
+                if (distance < 40) {
+                    gameOver();
+                }
+            });
+            
+            rocks.forEach(rock => {
+                rock.position.z += moveSpeed;
+                if (rock.position.z > plane.position.z + 300) {
+                    rock.position.z = plane.position.z - 1200;
+                    rock.position.x = Math.random() * 1500 - 750;
+                }
+            });
+            
+            clouds.forEach(cloud => {
+                cloud.position.z += moveSpeed * 0.4;
+                if (cloud.position.z > plane.position.z + 400) {
+                    cloud.position.z = plane.position.z - 1600;
+                    cloud.position.x = Math.random() * 1500 - 750;
+                }
+            });
+            
+            birds.forEach(bird => {
+                bird.userData.angle += 0.02;
+                bird.position.x += Math.cos(bird.userData.angle) * bird.userData.speed;
+                bird.position.z += Math.sin(bird.userData.angle) * bird.userData.speed + moveSpeed * 0.3;
+                
+                bird.userData.wingPhase += 0.2;
+                bird.userData.wings.rotation.z = Math.sin(bird.userData.wingPhase) * 0.5;
+                
+                if (bird.position.z > plane.position.z + 400) {
+                    bird.position.z = plane.position.z - 1600;
+                    bird.position.x = Math.random() * 1000 - 500;
+                }
+            });
+            
+            if (altitude < 12) {
+                gameOver();
+            }
+        }
+        
+        function updateUI() {
+            document.getElementById('speed').textContent = Math.round(speed);
+            document.getElementById('altitude').textContent = Math.round(altitude);
+            document.getElementById('score').textContent = Math.round(score);
+            document.getElementById('highScore').textContent = Math.round(highScore);
+        }
+        
+        function gameOver() {
+            if (!gameRunning) return;
+            gameRunning = false;
+            
+            if (score > highScore) {
+                highScore = score;
+            }
+            
+            document.getElementById('finalScore').textContent = Math.round(score);
+            document.getElementById('finalHighScore').textContent = Math.round(highScore);
+            document.getElementById('gameOver').style.display = 'block';
+        }
+        
+        function restartGame() {
+            document.getElementById('gameOver').style.display = 'none';
+            
+            speed = 60;
+            altitude = 100;
+            score = 0;
+            gameRunning = true;
+            planeRotation = { x: 0, y: 0, z: 0 };
+            cameraOffset = { x: 0, y: 0 };
+            
+            plane.position.set(0, altitude, 0);
+            plane.rotation.set(0, 0, 0);
+            
+            trees.forEach((tree) => {
+                tree.position.z = Math.random() * 1500 - 750;
+            });
+            mountains.forEach((mountain) => {
+                mountain.position.z = Math.random() * 2000 - 1000;
+            });
+            rocks.forEach((rock) => {
+                rock.position.z = Math.random() * 1500 - 750;
+            });
+            clouds.forEach((cloud) => {
+                cloud.position.z = Math.random() * 1500 - 750;
+            });
+            birds.forEach((bird) => {
+                bird.position.z = Math.random() * 1000 - 500;
+            });
+        }
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            if (gameRunning) {
+                updatePlane();
+                updateEnvironment();
+            }
+            
+            renderer.render(scene, camera);
+        }
+        
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+        
+        init();
+    </script>
+</body>
+</html>
